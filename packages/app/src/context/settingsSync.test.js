@@ -4,19 +4,67 @@
 
 // Nothing renders here. The provider only needs React to exist while the module loads, and
 // the real one can't be pulled in because the CLI ships a second copy that disagrees with it.
-jest.mock('react/jsx-dev-runtime', () => ({}));
-jest.mock('react', () => ({createContext: () => ({})}));
+jest.mock('react/jsx-dev-runtime', () => ({jsxDEV: jest.fn()}));
+jest.mock('react', () => ({
+	createContext: () => ({}),
+	useState: jest.fn(),
+	useEffect: jest.fn(),
+	useRef: jest.fn(),
+	useCallback: jest.fn(),
+	useMemo: jest.fn()
+}));
 // Storage picks its platform module through a dynamic import that jest can't transform.
-jest.mock('../services/storage', () => ({}));
+jest.mock('../services/storage', () => ({getFromStorage: jest.fn(), saveToStorage: jest.fn()}));
 // Only the profile save is ever reached, and the queue tests need to see where it went.
 jest.mock('../services/seerrApi', () => ({saveMoonfinProfile: jest.fn(() => Promise.resolve(true))}));
 
 import {saveMoonfinProfile} from '../services/seerrApi';
+import {useState, useEffect, useRef, useCallback, useMemo} from 'react';
+import {getFromStorage, saveToStorage} from '../services/storage';
 import {
-	SYNCABLE_KEYS, SYNC_PROFILES, __pushQueue, activeSyncProfile, defaultSettings, flushSettingsPush,
-	localToProfile, migrateKeyboardStyle, profileToLocal, resolveFromEnvelope, sameSyncedValue
+	SettingsProvider, SYNCABLE_KEYS, SYNC_PROFILES, __pushQueue, activeSyncProfile, defaultSettings, flushSettingsPush,
+	localToProfile, migrateKeyboardStyle, migrateTruehdPassthrough, profileToLocal, resolveFromEnvelope, sameSyncedValue
 } from './SettingsContext';
 import {__resetHomeLayoutPassthrough, homeRowsFromProfile} from '../utils/homeLayout';
+
+describe('retired TrueHD override migration', () => {
+	test.each([true, false])('hydration persists cleanup for stored force=%s', async (forceTruehdPassthrough) => {
+		const stored = {...defaultSettings, forceTruehdPassthrough, truehdPassthrough: false};
+		getFromStorage.mockImplementation(async (key) => key === 'settings' ? stored : null);
+		useState.mockImplementation((value) => [value, jest.fn()]);
+		useRef.mockImplementation((value) => ({current: value}));
+		useCallback.mockImplementation((fn) => fn);
+		useMemo.mockImplementation((fn) => fn());
+		// Only run boot hydration, not unrelated theme/network effects.
+		useEffect.mockImplementation(() => {});
+		useEffect.mockImplementationOnce((effect) => effect());
+		SettingsProvider({children: null});
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(saveToStorage).toHaveBeenCalledWith('settings', expect.objectContaining({truehdPassthrough: false}));
+		const saved = saveToStorage.mock.calls.find(([key]) => key === 'settings')[1];
+		expect(saved).not.toHaveProperty('forceTruehdPassthrough');
+		expect(migrateTruehdPassthrough(saved)).toBe(false);
+	});
+
+	test.each([true, false])('removes legacy %s once without changing supported preferences', (forceTruehdPassthrough) => {
+		const stored = {forceTruehdPassthrough, truehdPassthrough: false, dtshdPassthrough: true, audioPassthroughMode: 'manual'};
+		expect(migrateTruehdPassthrough(stored)).toBe(true);
+		expect(stored).toEqual({truehdPassthrough: false, dtshdPassthrough: true, audioPassthroughMode: 'manual'});
+		expect(migrateTruehdPassthrough(stored)).toBe(false);
+		expect({...defaultSettings, ...stored}).not.toHaveProperty('forceTruehdPassthrough');
+	});
+
+	test('absent settings remain untouched and neither sync direction includes the retired key', () => {
+		const stored = {truehdPassthrough: true};
+		expect(migrateTruehdPassthrough(stored)).toBe(false);
+		expect(stored).toEqual({truehdPassthrough: true});
+		expect(SYNCABLE_KEYS).not.toContain('forceTruehdPassthrough');
+		expect(profileToLocal({forceTruehdPassthrough: true})).toEqual({});
+		expect(localToProfile({forceTruehdPassthrough: true}, ['forceTruehdPassthrough'])).not.toHaveProperty('forceTruehdPassthrough');
+	});
+});
 
 describe('profileToLocal', () => {
 	test('takes the TV button fields under their own names', () => {

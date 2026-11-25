@@ -153,6 +153,18 @@ describe('settings schema', () => {
 		const truehdRow = () => allRows().find(({row}) => row.key === 'experimentalTruehd').row;
 		const shownWith = (overrides, settings = {}) => truehdRow().when({...ctx, ...overrides, settings: {...ctx.settings, ...settings}});
 
+		test('LG has neither TrueHD control nor a searchable retired setting', () => {
+			expect(defaultSettings).not.toHaveProperty('forceTruehdPassthrough');
+			expect(allRows().some(({row}) => row.key === 'forceTruehdPassthrough')).toBe(false);
+			const normal = allRows().find(({row}) => row.key === 'truehdPassthrough').row;
+			for (const audioPassthroughMode of ['auto', 'manual', 'disabled']) {
+				const lg = {...ctx, settings: {...defaultSettings, audioPassthroughMode}};
+				expect(normal.when(lg)).toBe(false);
+				expect(matchSettings(buildSettingsIndex(SETTINGS_SCHEMA, lg, {resolve, spotlightIdOf}), 'TrueHD')).toEqual([]);
+				expect(Boolean(normal.when({...lg, isWebOS: false, isTizen: true}))).toBe(audioPassthroughMode === 'manual');
+			}
+		});
+
 		test('only Samsung sets offer it', () => {
 			expect(shownWith({isTizen: true, isWebOS: false})).toBe(true);
 			expect(shownWith({isTizen: false, isWebOS: true})).toBe(false);

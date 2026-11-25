@@ -1,5 +1,14 @@
 import {createSiloPlayback, siloCapabilitiesFromDeviceProfile, siloPlanToMediaSource, siloPlaybackContext, siloSubtitleOrder, siloTraitsFor} from './siloPlayback';
 import {siloVersionToMediaSource} from './siloMediaSources';
+import {getJellyfinDeviceProfile} from '../../../platform-webos/src/deviceProfile';
+
+jest.mock('@enact/webos/deviceinfo', () => ({__esModule: true, default: (cb) => cb({})}));
+jest.mock('@enact/webos/LS2Request', () => ({
+	__esModule: true,
+	default: class {
+		send({onFailure}) { onFailure({}); }
+	}
+}));
 
 const BASE = 'http://silo:8090';
 
@@ -161,6 +170,24 @@ describe('sessions', () => {
 		expect(calls[1].body).toMatchObject({
 			file_id: '5', profile_id: 'p1', installation_id: 'inst', start_position: 300, audio_track_index: 1, subtitle_track_index: 0, protocol_version: 3
 		});
+	});
+
+	test('generated LG profiles withdraw TrueHD from capability conversion and start payloads', async () => {
+		const profile = await getJellyfinDeviceProfile({passthroughSettings: {forceTruehdPassthrough: true}});
+		const caps = siloCapabilitiesFromDeviceProfile(profile, siloTraitsFor('webos'));
+		expect(caps.clientCapabilities.codecs_audio).toEqual(expect.arrayContaining(['ac3', 'eac3']));
+		const {playback, calls} = setup({'GET /api/v2/playback/capabilities': capabilities, 'POST /api/v2/playback/start': plan('original_http', 'lg')});
+		await playback.getPlaybackInfo('movie-1', {DeviceProfile: profile});
+		const body = calls.find((call) => call.path === '/api/v2/playback/start').body;
+		expect(body.client_capabilities.codecs_audio).toEqual(caps.clientCapabilities.codecs_audio);
+		for (const delivery of Object.values(body.client_playback_context.deliveries)) {
+			for (const codecs of Object.values(delivery).filter(Array.isArray)) {
+				expect(codecs).not.toContain('truehd');
+				expect(codecs).not.toContain('mlp');
+			}
+		}
+		expect(body.client_capabilities.codecs_audio).not.toContain('truehd');
+		expect(body.client_capabilities.codecs_audio).not.toContain('mlp');
 	});
 
 	test('asked again while it plays, the session is replanned, and a failed original asks for something else', async () => {

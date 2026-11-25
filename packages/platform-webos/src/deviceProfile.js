@@ -12,9 +12,7 @@ const DEFAULT_PASSTHROUGH_SETTINGS = {
 	ac3Passthrough: true,
 	eac3Passthrough: true,
 	dtsPassthrough: true,
-	dtshdPassthrough: true,
-	truehdPassthrough: true,
-	forceTruehdPassthrough: false
+	dtshdPassthrough: true
 };
 
 const resolvePassthroughSettings = (options = {}) => ({
@@ -108,7 +106,7 @@ const applyAudioOutputPath = async (baseCaps, request) => {
 	return {
 		...baseCaps,
 		dts,
-		truehd: receiverPassthrough,
+		truehd: false,
 		dtshd: receiverPassthrough && !!(dts.mkv || dts.mp4 || dts.ts),
 		audioOutputStatus,
 		externalAudioPathActive: receiverPassthrough
@@ -124,8 +122,8 @@ const applyPassthroughSettings = (caps, options = {}) => {
 		...caps,
 		ac3: !!caps.ac3 && !!prefs.ac3Passthrough,
 		eac3: !!caps.eac3 && !!prefs.eac3Passthrough,
-		// The force toggle skips receiver detection for setups the TV misreports
-		truehd: !!prefs.forceTruehdPassthrough || (!!caps.truehd && passthroughAllowed && !!prefs.truehdPassthrough),
+		// TrueHD is unsupported, including on receiver passthrough paths.
+		truehd: false,
 		dts: dtsSupport,
 		dtshd: !!caps.dtshd && passthroughAllowed && !!prefs.dtshdPassthrough
 	};
@@ -430,7 +428,6 @@ const buildMp4AudioCodecs = (caps) => {
 	if (dts.mp4 && caps.dtshd) mp4AudioCodecs.push('dts-hd', 'dtshd');
 	if (caps.opus) mp4AudioCodecs.push('opus');
 	if (caps.flac) mp4AudioCodecs.push('flac');
-	if (caps.truehd) mp4AudioCodecs.push('truehd');
 	return mp4AudioCodecs;
 
 }
@@ -453,7 +450,6 @@ const buildTsAudioCodecs = (caps) => {
 	if (dts.ts) tsAudioCodecs.push('dca', 'dts');
 	if (dts.ts && caps.dtshd) tsAudioCodecs.push('dts-hd', 'dtshd');
 	if (caps.opus) tsAudioCodecs.push('opus');
-	if (caps.truehd) tsAudioCodecs.push('truehd');
 	return tsAudioCodecs;
 }
 
@@ -481,7 +477,6 @@ const buildMkvAudioCodecs = (caps) => {
 	if (dts.mkv && caps.dtshd) mkvAudioCodecs.push('dts-hd', 'dtshd');
 	if (caps.opus) mkvAudioCodecs.push('opus');
 	if (caps.flac) mkvAudioCodecs.push('flac');
-	if (caps.truehd) mkvAudioCodecs.push('truehd');
 	return mkvAudioCodecs;
 
 }
@@ -675,7 +670,7 @@ export const getJellyfinDeviceProfile = async (options = {}) => {
 	const directPlayProfiles = buildDirectPlayProfiles(caps);
 
 	const maxStreamingBitrate = 120_000_000;
-	const maxAudioChannels = caps.dolbyAtmos || caps.truehd || caps.dtshd ? '8' : '6';
+	const maxAudioChannels = caps.dolbyAtmos || caps.dtshd ? '8' : '6';
 
 	// fMP4 preserves DV RPU metadata; MPEG-TS strips it. Use fMP4 on webOS 5+.
 	const hlsContainer = caps.nativeHlsFmp4 ? 'mp4' : 'ts';

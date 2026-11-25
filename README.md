@@ -24,7 +24,7 @@ Moonfin is a Jellyfin, Emby, Plex and Silo client for Samsung Smart TVs (Tizen),
 ## Features
 
 - **Hardware-accelerated playback** through Samsung AVPlay, webOS Starfish, the Fire TV WebView and the Xbox console's own player, with direct play first and a transcode fallback only when needed.
-- **Lossless audio passthrough** for DTS, DTS-HD, and Dolby TrueHD to a capable receiver on LG and Samsung TVs. On Xbox, an experimental Passthrough setting does the same for TrueHD, DTS and Dolby Digital. Without it, the console decodes the sound and sends it to the receiver as PCM.
+- **Audio passthrough** for supported DTS and DTS-HD formats to a capable receiver on LG and Samsung TVs. LG also supports E-AC-3 Atmos (JOC), but not Dolby TrueHD. Samsung has a separate experimental TrueHD opt-in with device-specific support. On Xbox, an independent experimental Passthrough setting supports TrueHD, DTS and Dolby Digital. Without it, the console decodes the sound and sends it to the receiver as PCM.
 - **Multi-server, Emby and Plex support**, including Emby Connect, Plex sign-in through plex.tv with Plex Home users and Live TV, Quick Connect with a QR code for your phone, and a unified library view across all your Jellyfin servers.
 - **Silo support**, through Silo's own API: the household's profiles with their PINs, signing in with a code approved on another device, Silo's playback plans, markers and seek previews, Silo's own home sections, requests and calendar, and Watch Party for watching together. See [Connecting to Silo](#connecting-to-silo).
 - **A setup wizard on first run** that walks you through the look of the app with live previews built from your own artwork, including five detail screen styles: Classic, Modern, Spotlight, Nouveau, and Minimalist.

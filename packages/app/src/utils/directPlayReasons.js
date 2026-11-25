@@ -1,5 +1,5 @@
 import $L from '@enact/i18n/$L';
-import {isVega, isXbox} from '../platform';
+import {getPlatform, isVega, isXbox} from '../platform';
 
 // Why a file can't direct play, in words, with a hint about the setting that would change it.
 //
@@ -265,10 +265,12 @@ export const formatDirectPlayReason = (detail, settings = {}) => {
 	if (key === 'audiocodecnotsupported') {
 		if (!codec) return {description: $L('Audio codec is not supported.')};
 		const passthrough = settings.audioPassthroughMode || 'auto';
+		// Only Tizen has a TrueHD passthrough remedy; unknown adapters fall back to webOS.
+		const unsupportedTruehd = ['TRUEHD', 'MLP'].includes(codec) && getPlatform() !== 'tizen';
 		return {
 			description: $L('Audio codec ({codec}) is not supported directly.').replace('{codec}', codec),
 			// Neither Fire TV nor Xbox has a passthrough setting that would let this codec play
-			hint: !isVega() && !isXbox() && (passthrough === 'disabled' || passthrough === 'auto')
+			hint: !unsupportedTruehd && !isVega() && !isXbox() && (passthrough === 'disabled' || passthrough === 'auto')
 				? $L('Tip: If your audio receiver or soundbar supports {codec}, enable Audio Passthrough in Audio Preferences.').replace('{codec}', codec)
 				: null
 		};

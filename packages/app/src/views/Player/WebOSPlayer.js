@@ -1261,7 +1261,6 @@ const Player = ({item, resume, initialMediaSourceId, initialAudioIndex, initialS
 					videoStream: describeVideoStream(findVideoStream(result.mediaSource)),
 					videoSupport,
 					forceDirectPlay: Boolean(playbackInfoOptions.forceDirectPlay),
-					forceTruehdPassthrough: Boolean(settings.forceTruehdPassthrough),
 					audioOutputStatus: audioCaps?.audioOutputStatus,
 					defaultAudioStreamIndex: result.defaultAudioStreamIndex,
 					selectedAudioStreamIndex: result.selectedAudioStreamIndex,
@@ -1462,7 +1461,7 @@ const Player = ({item, resume, initialMediaSourceId, initialAudioIndex, initialS
 			}
 		};
 	// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [item, resume, onPlayNext, selectedQuality, settings.maxBitrate, settings.preferTranscode, settings.forceDirectPlay, settings.forceTruehdPassthrough, forceTranscode, settings.subtitleMode, settings.introAction, settings.outroAction, initialAudioIndex, initialSubtitleIndex, tuneRevision, loadTextTrack, startInBandText, disposeTextSource]);
+	}, [item, resume, onPlayNext, selectedQuality, settings.maxBitrate, settings.preferTranscode, settings.forceDirectPlay, forceTranscode, settings.subtitleMode, settings.introAction, settings.outroAction, initialAudioIndex, initialSubtitleIndex, tuneRevision, loadTextTrack, startInBandText, disposeTextSource]);
 
 	// Another client can queue more while this plays, and what it puts behind this plays next.
 	useEffect(() => {

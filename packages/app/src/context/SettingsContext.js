@@ -687,6 +687,14 @@ export const migrateKeyboardStyle = (stored) => {
 	return true;
 };
 
+// PUBLIC_INTERFACE
+/** Remove the retired force preference in place; return whether persistence is needed. */
+export const migrateTruehdPassthrough = (stored) => {
+	if (!Object.prototype.hasOwnProperty.call(stored, 'forceTruehdPassthrough')) return false;
+	delete stored.forceTruehdPassthrough;
+	return true;
+};
+
 export function SettingsProvider({children}) {
 	const [settings, setSettings] = useState(defaultSettings);
 	const [loaded, setLoaded] = useState(false);
@@ -890,6 +898,7 @@ export function SettingsProvider({children}) {
 					migrated = true;
 				}
 				if (migrateKeyboardStyle(stored)) migrated = true;
+				if (migrateTruehdPassthrough(stored)) migrated = true;
 				const merged = {...defaultSettings, ...stored};
 				setSettings(merged);
 				if (migrated) saveToStorage('settings', merged);

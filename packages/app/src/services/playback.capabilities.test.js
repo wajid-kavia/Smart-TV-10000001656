@@ -2,6 +2,8 @@ import * as playback from './playback';
 import * as jellyfinApi from './jellyfinApi';
 import {getDeviceCapabilities, getDeviceProfile} from './deviceProfile';
 import {linkBitrate} from './linkBitrate';
+import {getPlayMethod, isAudioStreamPlayable} from './video';
+import {getFromStorage} from './storage';
 
 jest.mock('./jellyfinApi', () => {
 	const server = {getPlaybackInfo: jest.fn(), closeLiveStream: jest.fn(), reportPlaybackStopped: jest.fn()};
@@ -23,13 +25,13 @@ jest.mock('./deviceProfile', () => ({
 }));
 jest.mock('./linkBitrate', () => ({linkBitrate: jest.fn()}));
 jest.mock('./video', () => ({
-	getPlayMethod: () => 'DirectPlay',
+	getPlayMethod: jest.fn(() => 'DirectPlay'),
 	getMimeType: () => 'video/mp4',
-	isAudioStreamPlayable: () => true,
+	isAudioStreamPlayable: jest.fn(() => true),
 	canRenderEmbeddedPgsInBand: () => false,
 	rendersSubtitleInHost: () => false
 }));
-jest.mock('./storage', () => ({getFromStorage: async () => ({})}));
+jest.mock('./storage', () => ({getFromStorage: jest.fn(async () => ({}))}));
 jest.mock('./serverLogger', () => ({serverLogger: {playback: jest.fn()}}));
 jest.mock('./systemVolume', () => ({getVolumeState: jest.fn(), lastVolumeState: () => null}));
 jest.mock('../platform', () => ({isVega: () => false, isXbox: () => false, isTizen: () => false}));
@@ -40,12 +42,73 @@ const movie = {Id: 'movie-1', Type: 'Movie'};
 beforeEach(async () => {
 	await playback.reportStop(0);
 	jest.clearAllMocks();
+	getFromStorage.mockResolvedValue({});
+	getPlayMethod.mockImplementation(() => 'DirectPlay');
+	isAudioStreamPlayable.mockImplementation(() => true);
 	jest.spyOn(console, 'log').mockImplementation(() => {});
 	api.reportPlaybackStopped.mockResolvedValue(null);
 	getDeviceProfile.mockResolvedValue({});
 	api.getPlaybackInfo.mockResolvedValue({
 		PlaySessionId: 'session',
 		MediaSources: [{Id: 'source', SupportsDirectPlay: true, Container: 'mkv', MediaStreams: []}]
+	});
+});
+
+describe('LG TrueHD negotiation', () => {
+	const source = (codec, alternate = null) => ({
+		Id: 'source', Container: 'mkv', SupportsDirectPlay: true, SupportsDirectStream: true,
+		DefaultAudioStreamIndex: 1,
+		MediaStreams: [
+			{Type: 'Video', Index: 0, Codec: 'h264'},
+			{Type: 'Audio', Index: 1, Codec: codec, Language: 'eng'},
+			...(alternate ? [{Type: 'Audio', Index: 2, Codec: alternate, Language: 'eng'}] : [])
+		]
+	});
+	beforeEach(() => {
+		const webos = jest.requireActual('../../../platform-webos/src/video');
+		getPlayMethod.mockImplementation(webos.getPlayMethod);
+		isAudioStreamPlayable.mockImplementation(webos.isAudioStreamPlayable);
+		getDeviceCapabilities.mockResolvedValue({mkv: true, h264: true, ac3: true, eac3: true, truehd: true});
+	});
+
+	test.each(['ac3', 'eac3'])('selects same-language %s instead of the TrueHD default', async (alternate) => {
+		api.getPlaybackInfo
+			.mockResolvedValueOnce({MediaSources: [source('truehd', alternate)]})
+			.mockResolvedValueOnce({MediaSources: [{...source('truehd', alternate), DefaultAudioStreamIndex: 2}]});
+		const result = await playback.getPlaybackInfo(movie.Id, {item: movie, passthroughSettings: {forceTruehdPassthrough: true}});
+		expect(api.getPlaybackInfo.mock.calls[1][1].AudioStreamIndex).toBe(2);
+		expect(result.selectedAudioStreamIndex).toBe(2);
+		expect(result.playMethod).toBe('DirectPlay');
+		expect(getDeviceProfile.mock.calls[0][1].passthroughSettings).not.toHaveProperty('forceTruehdPassthrough');
+	});
+
+	test.each(['truehd', 'mlp'])('requests conversion for %s-only media', async (codec) => {
+		api.getPlaybackInfo
+			.mockResolvedValueOnce({MediaSources: [source(codec)]})
+			.mockResolvedValue({MediaSources: [{...source(codec), SupportsDirectPlay: false, SupportsDirectStream: false,
+				TranscodingUrl: '/videos/movie-1/master.m3u8?MediaSourceId=source'}]});
+		const result = await playback.getPlaybackInfo(movie.Id, {item: movie, forceTruehdPassthrough: true});
+		expect(api.getPlaybackInfo.mock.calls[1][1]).toMatchObject({EnableDirectPlay: false, EnableDirectStream: false, EnableTranscoding: true});
+		expect(result.playMethod).toBe('Transcode');
+	});
+
+	test('does not silently substitute an explicitly selected TrueHD track', async () => {
+		api.getPlaybackInfo
+			.mockResolvedValueOnce({MediaSources: [{...source('truehd', 'ac3'), SupportsDirectPlay: false, SupportsDirectStream: false}]})
+			.mockResolvedValue({MediaSources: [{...source('truehd', 'ac3'), SupportsDirectPlay: false, SupportsDirectStream: false,
+				TranscodingUrl: '/videos/movie-1/master.m3u8?MediaSourceId=source'}]});
+		const result = await playback.getPlaybackInfo(movie.Id, {item: movie, audioStreamIndex: 1});
+		expect(api.getPlaybackInfo.mock.calls[1][1].AudioStreamIndex).toBe(1);
+		expect(result.selectedAudioStreamIndex).toBe(1);
+		expect(result.playMethod).toBe('Transcode');
+	});
+
+	test.each([true, false])('ignores saved legacy force=%s and fails cleanly without a conversion URL', async (forceTruehdPassthrough) => {
+		getFromStorage.mockResolvedValue({forceTruehdPassthrough, truehdPassthrough: true});
+		api.getPlaybackInfo.mockImplementation(async () => ({MediaSources: [source('truehd')]}));
+		await expect(playback.getPlaybackInfo(movie.Id, {item: movie})).rejects.toThrow('No playback URL available');
+		expect(getDeviceProfile.mock.calls[0][1].passthroughSettings).not.toHaveProperty('forceTruehdPassthrough');
+		expect(api.getPlaybackInfo.mock.calls[1][1]).toMatchObject({EnableDirectPlay: false, EnableDirectStream: false});
 	});
 });
 

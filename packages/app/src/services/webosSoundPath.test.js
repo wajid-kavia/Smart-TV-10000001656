@@ -1,6 +1,7 @@
 import {clearCapabilitiesCache, getDeviceCapabilities, getJellyfinDeviceProfile} from '../../../platform-webos/src/deviceProfile';
 
 let mockSoundOutput;
+let mockDigitalOutput;
 const mockSoundReads = jest.fn();
 
 jest.mock('@enact/webos/deviceinfo', () => ({
@@ -14,7 +15,7 @@ jest.mock('@enact/webos/LS2Request', () => ({
 		send ({method, onSuccess}) {
 			if (method === 'getSystemSettings') {
 				mockSoundReads();
-				onSuccess({settings: {soundOutput: mockSoundOutput, digitalSoundOutput: 'passthrough'}});
+				onSuccess({settings: {soundOutput: mockSoundOutput, digitalSoundOutput: mockDigitalOutput}});
 			} else {
 				onSuccess({});
 			}
@@ -25,7 +26,29 @@ jest.mock('@enact/webos/LS2Request', () => ({
 describe('the webOS sound path', () => {
 	beforeEach(() => {
 		mockSoundOutput = 'tv_speaker';
+		mockDigitalOutput = 'passthrough';
 		clearCapabilitiesCache();
+	});
+
+	test.each([
+		['tv_speaker', 'passthrough', false],
+		['external_arc', 'passthrough', true],
+		['external_earc', 'auto', true],
+		['external_arc', 'pcm', false]
+	])('%s with %s never enables TrueHD', async (output, digital, receiver) => {
+		mockSoundOutput = output;
+		mockDigitalOutput = digital;
+		for (let read = 0; read < 2; read++) {
+			const caps = await getDeviceCapabilities({});
+			expect(caps.truehd).toBe(false);
+			expect(caps.externalAudioPathActive).toBe(receiver);
+			expect(caps.dtshd).toBe(receiver);
+			expect(caps.eac3).toBe(true);
+			const profile = await getJellyfinDeviceProfile({passthroughSettings: {forceTruehdPassthrough: true}});
+			const mkv = profile.DirectPlayProfiles.find((entry) => entry.Container === 'mkv');
+			expect(mkv.AudioCodec.split(',')).not.toContain('truehd');
+			expect(mkv.AudioCodec.includes('dtshd')).toBe(receiver);
+		}
 	});
 
 	test('one playback start asks the TV once', async () => {

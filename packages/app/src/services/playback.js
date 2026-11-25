@@ -119,8 +119,7 @@ const DEFAULT_PASSTHROUGH_SETTINGS = {
 	eac3Passthrough: true,
 	dtsPassthrough: true,
 	dtshdPassthrough: true,
-	truehdPassthrough: true,
-	forceTruehdPassthrough: false
+	truehdPassthrough: true
 };
 
 // Which of the three passthrough modes applies. Settings saved before the mode
@@ -137,7 +136,10 @@ const resolvePassthroughMode = (stored) => {
 
 const getPlaybackAudioSettings = async (options = {}, preloadedSettings = null) => {
 	if (options.passthroughSettings) {
-		return {...DEFAULT_PASSTHROUGH_SETTINGS, ...options.passthroughSettings};
+		// Only active preferences cross the playback boundary, not retired caller fields.
+		return Object.fromEntries(Object.entries(DEFAULT_PASSTHROUGH_SETTINGS).map(([key, fallback]) => [
+			key, options.passthroughSettings[key] ?? fallback
+		]));
 	}
 
 	const stored = preloadedSettings || (await getFromStorage('settings')) || {};
@@ -157,8 +159,7 @@ const getPlaybackAudioSettings = async (options = {}, preloadedSettings = null) 
 		eac3Passthrough: claim(options.eac3Passthrough, stored.eac3Passthrough, DEFAULT_PASSTHROUGH_SETTINGS.eac3Passthrough),
 		dtsPassthrough: claim(options.dtsPassthrough, stored.dtsPassthrough, DEFAULT_PASSTHROUGH_SETTINGS.dtsPassthrough),
 		dtshdPassthrough: claim(options.dtshdPassthrough, stored.dtshdPassthrough, DEFAULT_PASSTHROUGH_SETTINGS.dtshdPassthrough),
-		truehdPassthrough: claim(options.truehdPassthrough, stored.truehdPassthrough, DEFAULT_PASSTHROUGH_SETTINGS.truehdPassthrough),
-		forceTruehdPassthrough: off ? false : (options.forceTruehdPassthrough ?? stored.forceTruehdPassthrough ?? DEFAULT_PASSTHROUGH_SETTINGS.forceTruehdPassthrough)
+		truehdPassthrough: claim(options.truehdPassthrough, stored.truehdPassthrough, DEFAULT_PASSTHROUGH_SETTINGS.truehdPassthrough)
 	};
 };
 

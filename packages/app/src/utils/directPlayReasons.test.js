@@ -119,6 +119,25 @@ describe('resolveDirectPlayFailureDetails', () => {
 });
 
 describe('formatDirectPlayReason', () => {
+	const originalPlatform = process.env.REACT_APP_PLATFORM;
+	beforeEach(() => { process.env.REACT_APP_PLATFORM = 'tizen'; });
+	afterEach(() => {
+		if (originalPlatform === undefined) delete process.env.REACT_APP_PLATFORM;
+		else process.env.REACT_APP_PLATFORM = originalPlatform;
+	});
+
+	test.each(['webos', 'unknown', 'other'])('%s does not suggest restoring TrueHD through passthrough', (platform) => {
+		process.env.REACT_APP_PLATFORM = platform;
+		for (const codec of ['truehd', 'mlp']) {
+			for (const audioPassthroughMode of ['auto', 'manual', 'disabled']) {
+				const result = formatDirectPlayReason({reason: 'AudioCodecNotSupported', codec}, {audioPassthroughMode});
+				expect(result.hint).toBeNull();
+				expect(result.description).toContain(codec.toUpperCase());
+			}
+		}
+		expect(formatDirectPlayReason({reason: 'AudioCodecNotSupported', codec: 'dts'}).hint).toContain('Audio Passthrough');
+	});
+
 	test('names the audio codec and points at passthrough while it is off or automatic', () => {
 		const reason = {reason: 'AudioCodecNotSupported', codec: 'truehd'};
 		expect(formatDirectPlayReason(reason, {audioPassthroughMode: 'auto'})).toEqual({
@@ -129,6 +148,7 @@ describe('formatDirectPlayReason', () => {
 	});
 
 	test('points at no passthrough setting on Xbox', () => {
+		process.env.REACT_APP_PLATFORM = 'xbox';
 		window.__MOONFIN_XBOX__ = {v: 1};
 		try {
 			expect(formatDirectPlayReason({reason: 'AudioCodecNotSupported', codec: 'truehd'}, {audioPassthroughMode: 'auto'}).hint).toBeNull();
